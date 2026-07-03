@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permisos IPC minimos de LexArchivo",
+  "windows": ["main"],
+  "permissions": ["core:default", "updater:default", "process:allow-restart", "notification:default"]
+}
