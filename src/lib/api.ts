@@ -161,7 +161,7 @@ export const api = {
       update_notifications: true,
       ui_scale: 100,
       theme: "Claro",
-      app_version: "0.0.1"
+      app_version: "0.1.1"
     }),
   saveSettings: (settings: Partial<AppSettings>) => call<AppSettings>("save_settings", { settings }, settings as AppSettings),
   checkUpdates: () => call<string>("check_updates", {}, "No hay comprobacion remota configurada."),

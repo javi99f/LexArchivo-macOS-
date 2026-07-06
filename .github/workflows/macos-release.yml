@@ -12,6 +12,8 @@ permissions:
 jobs:
   build-macos:
     runs-on: macos-latest
+    env:
+      SYNCTHING_VERSION: 2.1.1
 
     steps:
       - name: Descargar codigo
@@ -43,6 +45,20 @@ jobs:
 
       - name: Pruebas Rust
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Preparar Syncthing incluido
+        run: |
+          mkdir -p src-tauri/resources
+          curl -L "https://github.com/syncthing/syncthing/releases/download/v${SYNCTHING_VERSION}/syncthing-macos-universal-v${SYNCTHING_VERSION}.zip" -o /tmp/syncthing.zip
+          unzip -q /tmp/syncthing.zip -d /tmp/syncthing
+          SYNCTHING_BIN="$(find /tmp/syncthing -type f -name syncthing | head -n 1)"
+          if [ -z "$SYNCTHING_BIN" ]; then
+            echo "No se encontro el binario de Syncthing"
+            exit 1
+          fi
+          cp "$SYNCTHING_BIN" src-tauri/resources/syncthing
+          chmod +x src-tauri/resources/syncthing
+          src-tauri/resources/syncthing --version
 
       - name: Construir instalador macOS
         run: pnpm exec tauri build --target universal-apple-darwin --bundles app,dmg

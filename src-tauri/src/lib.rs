@@ -3,7 +3,7 @@ use chrono::{Duration, Local, NaiveDateTime, TimeZone, Utc};
 use rand_core::OsRng;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::{env, fs, io::Write, path::{Path, PathBuf}, process::Command, sync::Mutex};
+use std::{env, fs, io::Write, path::{Path, PathBuf}, process::{Command, Stdio}, sync::Mutex, thread, time::Duration as StdDuration};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -11,7 +11,7 @@ use tauri::{Manager, State};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
-const APP_VERSION: &str = "0.0.1";
+const APP_VERSION: &str = "0.1.1";
 const MIGRATION_001: &str = include_str!("../migrations/001_initial.sql");
 const FAILED_ATTEMPTS_KEY: &str = "login_failed_attempts";
 const LOCKED_UNTIL_KEY: &str = "login_locked_until";
@@ -1035,11 +1035,45 @@ fn shared_case_dir(root: &Path, package_id: &str) -> PathBuf {
 }
 
 fn syncthing_program_path() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let bundled = env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().and_then(|macos| macos.parent()).map(|contents| contents.join("Resources").join("syncthing")))
+            .filter(|path| path.is_file());
+        if bundled.is_some() {
+            return bundled;
+        }
+        let dev = env::current_dir().ok().map(|dir| dir.join("src-tauri").join("resources").join("syncthing")).filter(|path| path.is_file());
+        if dev.is_some() {
+            return dev;
+        }
+        return Some(PathBuf::from("/usr/local/bin/syncthing")).filter(|path| path.is_file())
+            .or_else(|| Some(PathBuf::from("/opt/homebrew/bin/syncthing")).filter(|path| path.is_file()));
+    }
+    #[cfg(target_os = "windows")]
+    {
     env::var("LOCALAPPDATA").ok().map(|base| PathBuf::from(base).join("Programs").join("Syncthing").join("syncthing.exe")).filter(|path| path.is_file())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        None
+    }
 }
 
 fn syncthing_config_path() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        return env::var("HOME").ok().map(|home| PathBuf::from(home).join("Library").join("Application Support").join("Syncthing").join("config.xml")).filter(|path| path.is_file());
+    }
+    #[cfg(target_os = "windows")]
+    {
     env::var("LOCALAPPDATA").ok().map(|base| PathBuf::from(base).join("Syncthing").join("config.xml")).filter(|path| path.is_file())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        None
+    }
 }
 
 fn xml_between(text: &str, start: &str, end: &str) -> Option<String> {
@@ -1086,6 +1120,35 @@ fn syncthing_running(api_key: &str) -> bool {
         .send()
         .map(|response| response.status().is_success())
         .unwrap_or(false)
+}
+
+fn ensure_syncthing_running() -> bool {
+    if let Some((api_key, _device_id)) = syncthing_api_key_and_device() {
+        if syncthing_running(&api_key) {
+            return true;
+        }
+    }
+    let Some(program) = syncthing_program_path() else {
+        return false;
+    };
+    let mut command = Command::new(program);
+    command
+        .arg("--no-browser")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
+    let _ = command.spawn();
+    for _ in 0..12 {
+        thread::sleep(StdDuration::from_millis(500));
+        if let Some((api_key, _device_id)) = syncthing_api_key_and_device() {
+            if syncthing_running(&api_key) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn add_lexarchivo_folder_to_syncthing(path: &Path, api_key: &str, device_ids: &[String]) -> Result<(), String> {
@@ -1160,6 +1223,7 @@ fn get_sync_status(core: State<SharedCore>) -> Result<SyncStatus, String> {
     let config = syncthing_config_path();
     let installed = program.is_some();
     let version = program.as_ref().map(|path| syncthing_version(path)).unwrap_or_default();
+    let _ = ensure_syncthing_running();
     let (running, device_id) = syncthing_api_key_and_device()
         .map(|(api_key, device_id)| (syncthing_running(&api_key), device_id))
         .unwrap_or((false, String::new()));
@@ -1191,6 +1255,7 @@ fn create_lexarchivo_sync(core: State<SharedCore>, name: String) -> Result<SyncS
     set_setting(&conn, "shared_dir", &root.to_string_lossy())?;
     set_setting(&conn, "sync_name", name.trim())?;
     set_setting(&conn, "sync_role", "admin")?;
+    let _ = ensure_syncthing_running();
     if let Some((api_key, device_id)) = syncthing_api_key_and_device() {
         set_setting(&conn, "sync_code", &device_id)?;
         if syncthing_running(&api_key) {
@@ -1232,6 +1297,7 @@ fn join_lexarchivo_sync(core: State<SharedCore>, code: String) -> Result<SyncSta
     if get_setting(&conn, "sync_name")?.unwrap_or_default().trim().is_empty() {
         set_setting(&conn, "sync_name", "Uso Compartido")?;
     }
+    let _ = ensure_syncthing_running();
     if let Some((api_key, device_id)) = syncthing_api_key_and_device() {
         if syncthing_running(&api_key) {
             add_syncthing_device(&api_key, &remote_code, "Administrador LexArchivo")?;

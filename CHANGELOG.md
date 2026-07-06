@@ -1,5 +1,13 @@
 # Registro de cambios
 
+## 0.1.1 macOS
+
+- El instalador `.dmg` incluye Syncthing como motor interno de Uso Compartido.
+- LexArchivo macOS busca primero el Syncthing incluido dentro de la app.
+- Si Syncthing no esta activo, LexArchivo intenta arrancarlo en segundo plano sin abrir navegador.
+- La configuracion de Syncthing se lee desde `~/Library/Application Support/Syncthing/config.xml`.
+- GitHub Actions descarga automaticamente Syncthing macOS universal antes de generar el `.dmg`.
+
 ## 0.2.2
 
 - Correccion del tema claro/oscuro para que cambie al seleccionar la opcion.

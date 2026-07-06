@@ -2,7 +2,7 @@
 
 Version independiente para macOS de LexArchivo.
 
-Esta rama empieza en `0.0.1` y mantiene las mismas funciones principales que la version de Windows:
+Esta rama empieza en `0.0.1` y la version `0.1.1` prepara Uso Compartido en macOS incluyendo Syncthing dentro del instalador `.dmg`.
 
 - Clientes y expedientes.
 - Documentos por expediente.
@@ -51,15 +51,18 @@ src-tauri/target/universal-apple-darwin/release/bundle/dmg
 4. Publica una etiqueta:
 
 ```bash
-git tag v0.0.1
-git push origin v0.0.1
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 GitHub Actions generara automaticamente:
 
-- `LexArchivo_0.0.1_universal.dmg`
-- `LexArchivo_0.0.1_universal.dmg.sig`
+- `LexArchivo_0.1.1_universal.dmg`
+- `LexArchivo.app.tar.gz`
+- `LexArchivo.app.tar.gz.sig`
 - `latest.json`
+
+Desde la version `0.1.1`, GitHub Actions descarga `syncthing-macos-universal` y lo mete dentro de `LexArchivo.app` antes de crear el `.dmg`.
 
 ## Importante sobre el repositorio
 
